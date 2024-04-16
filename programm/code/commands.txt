@@ -1,0 +1,2 @@
+/send_status
+/check
