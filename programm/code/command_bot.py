@@ -2,6 +2,7 @@ import os
 import discord
 import asyncio
 import logging
+import sqlite3
 from discord.ext import commands
 from datetime import timedelta
 from samples import TOKEN
@@ -14,16 +15,29 @@ handler = logging.StreamHandler()
 handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
 logger.addHandler(handler)
 
+
 intents = discord.Intents.all()
-intents.presences = True  #
-intents.members = True  #
-intents.message_content = True  #
+intents.presences = True
+intents.members = True
+intents.message_content = True
+
+db = sqlite3.connect("../assets/database/ban_members.db")
+cursor = db.cursor()
+
+cursor.execute("""CREATE TABLE IF NOT EXISTS warnings(
+id INT PRIMARY KEY NOT NULL,
+warning_count INT)""")
+
+cursor.execute("""CREATE TABLE IF NOT EXISTS mutes (
+id INT PRIMARY KEY NOT NULL,
+name TEXT,
+FOREIGN KEY (id) REFERENCES warnings(id))""")
+
 
 with open('commands.txt', encoding='utf-8') as file:
     COMMANDS = [i.strip() for i in file.readlines()]
 with open('BAN_WORDS', encoding='utf-8') as file:
     BAN_WORDS = [i.strip() for i in file.readlines()]
-
 
 client = discord.Client(intents=intents)
 bot = commands.Bot(command_prefix='/', intents=intents)
@@ -32,9 +46,6 @@ bot = commands.Bot(command_prefix='/', intents=intents)
 class ModerBot(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-
-
-
 
     @commands.command(aliases=['send_status'])
     async def status(self, ctx):
@@ -57,20 +68,48 @@ roles:\n {sting_n.join([f'    {i}' for i in member.roles])}
 is on time outed: {member.timed_out_until}""")
 
 
+# @bot.event
+# async def on_message(ctx):
+#     if ctx.author == bot.user:
+#         return
+#     for i in COMMANDS:
+#         if i in ctx.content.lower().split()[0]:
+#             break
+#     else:
+#         for i in BAN_WORDS:
+#             if i in ctx.content.lower():
+#                 cursor.execute(f"SELECT name FROM mutes WHERE id = {ctx.author.id}") is not None and ctx.channel.id == с:
+#                 await ctx.delete()
 @bot.event
-async def on_message(ctx):
-    if ctx.author == bot.user:
-        return
-    for i in COMMANDS:
-        if i in ctx.content.lower().split()[0]:
-            break
+async def on_ready():
+    logger.info(f'{bot.user} has connected to Discord!')
+    for guild in bot.guilds:
+        logger.info(
+            f'{bot.user} подключились к чату:\n'
+            f'{guild.name}(id: {guild.id})')
+    id_members = cursor.execute("""SELECT id FROM warnings""").fetchall()
+    for guild in bot.guilds:
+        for member in guild.members:
+            if member.id not in id_members:
+                print(int(member.id))
+                cursor.execute("INSERT OR IGNORE INTO warnings VALUES(?, ?)", (int(member.id), 0))
+                db.commit()
+
+async def mute(ctx, user: discord.User):
+    if cursor.execute(f"SELECT name FROM mutes WHERE id = {ctx.author.id}").fetchone()[0] is not None:
+        await ctx.send("Этот игрок уже замучен")
     else:
-        for i in BAN_WORDS:
-            if i in ctx.content.lower():
-                await timeout_member(ctx.channel, ctx.author)
-                break
-        else:
-            await ctx.reply('я твой рот и жизнь ибал ежи')
+        cursor.execute("INSERT INTO mutes VALUES (?, ?)", (ctx.author.name, ctx.author.id))
+        await ctx.send("Успешно!")
+@bot.command()
+async def mute(ctx, user: discord.User):
+    # проверяем на существование записи с id пользователя
+    if cursor.execute(f"SELECT name FROM mutes WHERE id = {ctx.author.id}").fetchone()[0] is not None:
+        await ctx.send("Этот игрок уже замучен")
+    else:
+        cursor.execute("INSERT INTO mutes VALUES (?, ?)", (ctx.author.name, ctx.author.id))
+        await ctx.send("Успешно!")
+
 
 async def timeout_member(channel, member: discord.User, reason='Иди ты нахуй, выблядок'):
     # проверяем на существование записи с id пользователя
