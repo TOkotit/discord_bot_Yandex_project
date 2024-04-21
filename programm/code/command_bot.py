@@ -15,7 +15,6 @@ handler = logging.StreamHandler()
 handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
 logger.addHandler(handler)
 
-
 intents = discord.Intents.all()
 intents.presences = True
 intents.members = True
@@ -30,9 +29,8 @@ warning_count INT)""")
 
 cursor.execute("""CREATE TABLE IF NOT EXISTS mutes (
 id INT PRIMARY KEY NOT NULL,
-name TEXT,
+is_muted TEXT,
 FOREIGN KEY (id) REFERENCES warnings(id))""")
-
 
 with open('commands.txt', encoding='utf-8') as file:
     COMMANDS = [i.strip() for i in file.readlines()]
@@ -68,18 +66,39 @@ roles:\n {sting_n.join([f'    {i}' for i in member.roles])}
 is on time outed: {member.timed_out_until}""")
 
 
-# @bot.event
-# async def on_message(ctx):
-#     if ctx.author == bot.user:
-#         return
-#     for i in COMMANDS:
-#         if i in ctx.content.lower().split()[0]:
-#             break
-#     else:
-#         for i in BAN_WORDS:
-#             if i in ctx.content.lower():
-#                 cursor.execute(f"SELECT name FROM mutes WHERE id = {ctx.author.id}") is not None and ctx.channel.id == с:
-#                 await ctx.delete()
+@bot.event
+async def on_message(ctx):
+    print('get in')
+    if ctx.author == bot.user:
+        return
+    for i in COMMANDS:
+        if i in ctx.content.lower().split()[0]:
+            break
+    else:
+        print('check bans')
+        for i in BAN_WORDS:
+            if i in ctx.content.lower():
+                warg_count = cursor.execute(f"""SELECT warning_count FROM warnings
+                WHERE id = {ctx.author.id}""").fetchone()[0]
+                if warg_count == 3:
+                    cursor.execute(f"""UPDATE warnings
+                SET warning_count = 0
+                WHERE id = {ctx.author.id}""")
+                    cursor.execute(f"""UPDATE mutes
+                SET is_muted = 'True'
+                WHERE id = {ctx.author.id}""")
+                    db.commit()
+                    await timeout_member(ctx.channel, ctx.author)
+                else:
+                    print('warning')
+                    cursor.execute(f"""UPDATE warnings
+SET warning_count = {warg_count + 1}
+WHERE id = {ctx.author.id}""")
+                    db.commit()
+                    await ctx.channel.send(f'Так больше не пиши, отсалось {3 - warg_count - 1} предупреждений', reference=ctx)
+                await ctx.delete()
+
+
 @bot.event
 async def on_ready():
     logger.info(f'{bot.user} has connected to Discord!')
@@ -91,27 +110,14 @@ async def on_ready():
     for guild in bot.guilds:
         for member in guild.members:
             if member.id not in id_members:
-                print(int(member.id))
                 cursor.execute("INSERT OR IGNORE INTO warnings VALUES(?, ?)", (int(member.id), 0))
                 db.commit()
-
-async def mute(ctx, user: discord.User):
-    if cursor.execute(f"SELECT name FROM mutes WHERE id = {ctx.author.id}").fetchone()[0] is not None:
-        await ctx.send("Этот игрок уже замучен")
-    else:
-        cursor.execute("INSERT INTO mutes VALUES (?, ?)", (ctx.author.name, ctx.author.id))
-        await ctx.send("Успешно!")
-@bot.command()
-async def mute(ctx, user: discord.User):
-    # проверяем на существование записи с id пользователя
-    if cursor.execute(f"SELECT name FROM mutes WHERE id = {ctx.author.id}").fetchone()[0] is not None:
-        await ctx.send("Этот игрок уже замучен")
-    else:
-        cursor.execute("INSERT INTO mutes VALUES (?, ?)", (ctx.author.name, ctx.author.id))
-        await ctx.send("Успешно!")
+                cursor.execute("INSERT OR IGNORE INTO mutes VALUES(?, ?)", (int(member.id), 'False'))
+                db.commit()
 
 
-async def timeout_member(channel, member: discord.User, reason='Иди ты нахуй, выблядок'):
+
+async def timeout_member(channel, member: discord.User, reason='Так надо, объективно'):
     # проверяем на существование записи с id пользователя
     await member.timeout(timedelta(minutes=2), reason=reason)
     await channel.send(f'Участник {member.mention} был замучен.\nПричина: {reason}')
