@@ -7,6 +7,10 @@ from discord.ext import commands
 from datetime import timedelta
 from samples import TOKEN
 
+
+#............
+
+
 GUILD = os.getenv('GC_TEST_GUILD')
 
 logger = logging.getLogger('discord')
