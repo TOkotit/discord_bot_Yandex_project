@@ -1,1 +1,1 @@
-TOKEN = 'MTIyNTM5OTQ3MzAwNjcxMDgwNg.G3d      5Ju.IOCek-SY_m1l5      sC6axDmrRQKNPvE4CcEEwtwrc'
+TOKEN = open('TOKEN.txt').read().strip()
