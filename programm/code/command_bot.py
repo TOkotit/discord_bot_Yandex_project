@@ -1,10 +1,10 @@
 import os
 import discord
 import asyncio
+import traceback
 import logging
 import sqlite3
 import pymorphy3
-from discord import app_commands
 from discord.ext import commands
 from datetime import timedelta
 from samples import TOKEN
@@ -17,7 +17,7 @@ handler = logging.StreamHandler()
 handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
 logger.addHandler(handler)
 
-morh = pymorphy3.MorphAnalyzer()
+morph = pymorphy3.MorphAnalyzer()
 
 intents = discord.Intents.all()
 intents.presences = True
@@ -41,70 +41,7 @@ with open('commands.txt', encoding='utf-8') as file:
 with open('BAN_WORDS', encoding='utf-8') as file:
     BAN_WORDS = [i.strip() for i in file.readlines()]
 
-client = discord.Client(intents=intents)
 bot = commands.Bot(command_prefix='/', intents=intents)
-
-
-class ModerBot(commands.Cog):
-    def __init__(self, bot):
-        self.bot = bot
-
-    @commands.command(aliases=['send_status'])
-    async def status(self, ctx):
-        for guild in bot.guilds:
-            members = '\n - '.join([f"{member.name} ({member.status})" for member in guild.members])
-            await ctx.send(f'Guild Members:\n - {members}')
-
-    @commands.command(aliases=['check'])
-    async def check_member(self, ctx, member: discord.Member):
-        if member.activities:
-            activity = member.activities[0]
-        else:
-            activity = None
-        sting_n, string_t = '\n', '\t'
-        await ctx.send(f"""Guild member {member.name}
-status: {member.status}\ncolor:{member.color}
-CustomActivity name: {activity}
-id: {member.id}
-roles:\n {sting_n.join([f'    {i}' for i in member.roles])}
-is on time outed: {member.timed_out_until}""")
-
-
-@bot.listen()
-async def on_message(ctx):
-    if ctx.author == bot.user:
-        return
-    for i in COMMANDS:
-        if i in ctx.content.lower().split()[0]:
-            break
-    else:
-        for i in BAN_WORDS:
-            if morh.parse(i)[0].normal_form in ctx.content.lower():
-                warg_count = cursor.execute(f"""SELECT warning_count FROM warnings
-                WHERE id = {ctx.author.id}""").fetchone()[0]
-                if warg_count == 3:
-                    cursor.execute(f"""UPDATE warnings
-                SET warning_count = 0
-                WHERE id = {ctx.author.id}""")
-                    cursor.execute(f"""UPDATE mutes
-                SET mute_count = mute_count + 1
-                WHERE id = {ctx.author.id}""")
-                    db.commit()
-                    await timeout_member(ctx.channel, ctx.author)
-                else:
-                    dict_warnings = {
-                        3: 'осталось 2 предупреждения',
-                        2: 'осталось 1 предупреждение',
-                        1: 'последнее предупреждение'
-                    }
-                    cursor.execute(f"""UPDATE warnings
-SET warning_count = {warg_count + 1}
-WHERE id = {ctx.author.id}""")
-                    db.commit()
-                    await ctx.channel.send(
-                        f'{ctx.author.mention}, так больше не пиши, {dict_warnings[warg_count]}',
-                        reference=ctx)
-                await ctx.delete()
 
 
 @bot.event
@@ -122,18 +59,92 @@ async def on_ready():
                 db.commit()
                 cursor.execute("INSERT OR IGNORE INTO mutes VALUES(?, ?)", (int(member.id), 0))
                 db.commit()
+    synced = await bot.tree.sync()
+    print(f"Synced {len(synced)} command(s)")
+
+
+@bot.event
+async def on_error(event, *args, **kwargs):
+    error_message = traceback.format_exc()
+    print(f"ошибка {event}: {error_message}")
+
+
+@bot.listen()
+async def on_message(ctx):
+    if ctx.author == bot.user:
+        return
+    for i in COMMANDS:
+        if i in ctx.content.lower().split()[0]:
+            break
+    else:
+        for i in BAN_WORDS:
+            if morph.parse(i)[0].normal_form in ctx.content.lower():
+                if ctx.author.guild_permissions.administrator:
+                    await ctx.channel.send('Склоняю колено перед админом и прощаю ему все грехи', reference=ctx)
+                else:
+                    warg_count = cursor.execute(f"""SELECT warning_count FROM warnings
+                    WHERE id = {ctx.author.id}""").fetchone()[0]
+                    if warg_count == 3:
+                        cursor.execute(f"""UPDATE warnings
+                    SET warning_count = 0
+                    WHERE id = {ctx.author.id}""")
+                        cursor.execute(f"""UPDATE mutes
+                    SET mute_count = mute_count + 1
+                    WHERE id = {ctx.author.id}""")
+                        db.commit()
+                        await timeout_member(ctx.channel, ctx.author)
+                    else:
+                        dict_warnings = {
+                            0: 'осталось 2 предупреждения',
+                            1: 'осталось 1 предупреждение',
+                            2: 'последнее предупреждение'
+                        }
+                        cursor.execute(f"""UPDATE warnings
+    SET warning_count = warning_count + 1
+    WHERE id = {ctx.author.id}""")
+                        db.commit()
+                        await ctx.channel.send(
+                            f'{ctx.author.mention}, так больше не пиши, {dict_warnings[warg_count]}',
+                            reference=ctx)
+                await ctx.delete()
+                return
+
+
+@bot.tree.command(name='send_status', description='send status of member')
+async def status(interaction: discord.Interaction, role: discord.Role):
+    for guild in bot.guilds:
+        if role:
+
+            members = '\n - '.join(
+                [f"{member.name} ({member.status})" for member in guild.members if role in member.roles])
+        else:
+            members = '\n - '.join(
+                [f"{member.name} ({member.status})" for member in guild.members if role in member.roles])
+        await interaction.channel.send(f'Guild Member:\n - {members}')
+    await interaction.response.send_message('Всё готово, вот:')
+
+
+@bot.tree.command(name='check', description='send information of member')
+async def check_member(interaction: discord.Interaction, member: discord.Member):
+    if member.activities:
+        activity = member.activities[0]
+    else:
+        activity = None
+    sting_n, string_t = '\n', '\t'
+    await interaction.channel.send(f"""Guild member {member.name}
+status: {member.status}\ncolor:{member.color}
+CustomActivity name: {activity}
+id: {member.id}
+roles:\n {sting_n.join([f'    {i}' for i in member.roles])}
+is on time outed: {member.timed_out_until}""")
+    await interaction.response.send_message('Всё готово, вот:')
 
 
 async def timeout_member(channel, member: discord.User, reason='Так надо, объективно'):
     mute_count = cursor.execute(f"""SELECT mute_count FROM mutes
 WHERE id = {member.id}""").fetchone()[0]
-    await member.timeout(timedelta(minutes=2 * mute_count ** 0.5, reason=reason))
+    await member.timeout(timedelta(minutes=2 * mute_count ** 0.5), reason=reason)
     await channel.send(f'Участник {member.mention} был замучен.\nПричина: {reason}')
 
 
-async def main():
-    await bot.add_cog(ModerBot(bot))
-    await bot.start(TOKEN)
-
-
-asyncio.run(main())
+bot.run(TOKEN)
