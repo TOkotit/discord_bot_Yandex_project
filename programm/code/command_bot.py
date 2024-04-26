@@ -412,11 +412,46 @@ async def send_off(interaction: discord.Interaction):
         await interaction.response.send_message(embed=embed)
 
 
+@bot.tree.command(name='change_mute_counts', description='Изменяет пользователю счётчик мутов на ваше количество')
+async def add_mute_count(interaction: discord.Interaction, member: discord.Member, count: int):
+    sins = cursor.execute(f"""SELECT mute_count FROM '{interaction.guild.id}'
+WHERE id = {member.id}""").fetchone()[0]
+    if sins > 0:
+        if sins + count > 50:
+            cursor.execute(f"""UPDATE '{interaction.guild.id}'
+    SET mute_count = 50
+    WHERE id = {member.id}""")
+            db.commit()
+        elif sins + count <= 50:
+            cursor.execute(f"""UPDATE '{interaction.guild.id}'
+            SET mute_count = {sins + count}
+    WHERE id = {member.id}""")
+            db.commit()
+    else:
+        if sins + count < 0:
+            cursor.execute(f"""UPDATE '{interaction.guild.id}'
+            SET mute_count = 0
+    WHERE id = {member.id}""")
+            db.commit()
+        elif sins + count >= 0:
+            cursor.execute(f"""UPDATE '{interaction.guild.id}'
+            SET mute_count = {sins + count}
+    WHERE id = {member.id}""")
+            db.commit()
+    end_sin = cursor.execute(f"""SELECT mute_count FROM '{interaction.guild.id}'
+WHERE id = {member.id}""").fetchone()[0]
+    await interaction.response.send_message(f'Теперь у пользователя {member.name} mute_count = {end_sin}')
+
+
 async def timeout_member(guild_id, channel, member: discord.User, reason='Так надо, объективно'):
     mute_count = cursor.execute(f"""SELECT mute_count FROM '{guild_id}'
 WHERE id = {member.id}""").fetchone()[0]
     if mute_count > 50:
         mute_count = 50
+        cursor.execute(f"""UPDATE '{guild_id}'
+SET mute_count = 50
+WHERE id = {member.id}""")
+        db.commit()
     await member.timeout(timedelta(minutes=2 * (mute_count // 0.9)), reason=reason)
     await channel.send(f'Участник {member.mention} был замучен.\nПричина: {reason}')
 
