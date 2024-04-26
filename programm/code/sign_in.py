@@ -1,9 +1,9 @@
 import discord
 import sqlite3
-from discord import ui
+from discord import ui  # импорты
 
 
-class SignIn(ui.Modal, title='Авторизация'):
+class SignIn(ui.Modal, title='Авторизация'):  # окно авторизации
     def __init__(self, data, curs):
         self.curs = curs
         self.data = data
@@ -31,13 +31,13 @@ class SignIn(ui.Modal, title='Авторизация'):
 
     async def on_submit(self, interaction: discord.Interaction):
         data_base = sqlite3.connect('../server_files/database/keywords.db')
-        cursor = data_base.cursor()
+        cursor = data_base.cursor()  # после подтверждения открываем базу данных
 
         try:
             key = cursor.execute(f"""SELECT * FROM keys
 WHERE key = '{self.key_word.value.strip()}'""").fetchone()
         except Exception:
-            await interaction.response.send_message('Неправильный ключ')
+            await interaction.response.send_message('Неправильный ключ')  # провекри и костыли, чтобы всё работало
             return
         if key is None:
             await interaction.response.send_message('Неправильный ключ')
@@ -45,7 +45,7 @@ WHERE key = '{self.key_word.value.strip()}'""").fetchone()
         elif key[1] is None or key[2] is None or key[3] is None:
             cursor.execute(f"""UPDATE keys
 SET id = {interaction.guild.id}, login = '{self.member_login.value}', password = '{self.password.value}', IS_REGISTRATED = 'True'
-WHERE key = '{self.key_word.value}'""")
+WHERE key = '{self.key_word.value}'""")  # меняем значения в базе данных
             data_base.commit()
             data_base.close()
             self.curs.execute(f"""UPDATE permissions
@@ -53,7 +53,8 @@ SET CAN_USE = 'True'
 WHERE id = {interaction.guild.id}""")
             self.data.commit()
         elif key[1] is not None or key[2] is not None or key[3] is not None:
-            await interaction.response.send_message('Неправильный логин или пароль для этого сервера')
+            await interaction.response.send_message(
+                'Неправильный логин или пароль для этого сервера')  # всякие исключения
             return
         else:
             await interaction.response.send_message('Неправильный ключ')
@@ -63,4 +64,5 @@ WHERE id = {interaction.guild.id}""")
         await interaction.response.send_message(embed=embed)
 
     async def on_error(self, interaction: discord.Interaction, error):
-        await interaction.response.send_message('Что-то пошло не так :(\nПовторите поптыку позже')
+        await interaction.response.send_message(
+            'Что-то пошло не так :(\nПовторите поптыку позже')  # технические шоколадки
