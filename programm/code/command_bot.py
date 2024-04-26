@@ -1,6 +1,4 @@
-import os
 import discord
-import asyncio
 import traceback
 import logging
 import sqlite3
