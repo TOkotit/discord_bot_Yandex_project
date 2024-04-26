@@ -1,1 +1,1 @@
-TOKEN = open('TOKEN.txt').read().strip()
+TOKEN = open('../server_files/TOKEN.txt').read().strip()
